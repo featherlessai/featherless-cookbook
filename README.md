@@ -9,7 +9,7 @@ A comprehensive collection of guides, notebooks, and examples for using the Feat
 1. A Featherless AI account ([Sign up here](https://featherless.ai/register))
 2. API key from your [Featherless Dashboard](https://featherless.ai/account/api-keys)
 
-## Table of Contents
+## Library
 
 - Basic examples
     - [Text Completion](basic/textcompletion.ipynb): Learn how to make basic text completion calls
