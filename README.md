@@ -11,12 +11,12 @@ A comprehensive collection of guides, notebooks, and examples for using the Feat
 
 ## Table of Contents
 
-- Examples
+- Basic examples
     - [Text Completion](basic/textcompletion.ipynb): Learn how to make basic text completion calls
     - [Chat Completion](basic/chatcompletion.ipynb): Explore chat-based interactions
     - [OpenAI SDK Compatibility](basic/openai_sdk.ipynb): See how to use Featherless with OpenAI-compatible tools
     - [Model Comparison](basic/model_comparison.ipynb): Compare different models' responses to the same prompts
-  - LangChain Integration
+- LangChain Integration
     - [Basic LangChain Setup](langchain/langchain_start.ipynb): Get started with LangChain integration
     - [Multi-Task Processing](langchain/langchain_multitask.ipynb): Build advanced pipelines for translation and sentiment analysis
 
