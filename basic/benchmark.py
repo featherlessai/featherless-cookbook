@@ -21,9 +21,14 @@ import requests
 FEATHERLESS_API_BASE = "https://api.featherless.ai/v1"
 
 DEFAULT_MODELS = [
+    "LyraNovaHeart/Stellar-Odyssey-12b-v0.0",
+    "Qwen/Qwen3-235B-A22B",
+    "openerotica/writing-roleplay-20k-context-nemo-12b-v1.0",
     "deepseek-ai/DeepSeek-V3.2",
     "deepseek-ai/DeepSeek-V3-0324",
     "mistralai/Mistral-Small-24B-Instruct-2501",
+    "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
+    "Qwen/Qwen3-32B",
     "zai-org/GLM-5",
     "zai-org/GLM-4.7-Flash",
     "zai-org/GLM-4.6",
@@ -126,6 +131,7 @@ class BenchmarkResult:
     ttft_seconds: float = 0.0
     total_seconds: float = 0.0
     tokens_generated: int = 0
+    thinking_tokens: int = 0
     tokens_per_second: float = 0.0
     output: str = ""
     quality_scores: dict = field(default_factory=dict)
@@ -153,6 +159,8 @@ def stream_completion(api_key: str, model: str, prompt: str, max_tokens: int = 4
         start = time.perf_counter()
         first_token_time = None
         chunks: list[str] = []
+        thinking_count = 0
+        in_think_tag = False
 
         with requests.post(
             f"{FEATHERLESS_API_BASE}/chat/completions",
@@ -178,12 +186,24 @@ def stream_completion(api_key: str, model: str, prompt: str, max_tokens: int = 4
                     continue
                 delta = choices[0].get("delta", {})
                 content = delta.get("content", "")
-
-                if content and first_token_time is None:
-                    first_token_time = time.perf_counter()
+                reasoning = delta.get("reasoning", "") or delta.get("reasoning_content", "")
 
                 if content:
-                    chunks.append(content)
+                    if first_token_time is None:
+                        first_token_time = time.perf_counter()
+                    if "<think>" in content:
+                        in_think_tag = True
+                    if "</think>" in content:
+                        in_think_tag = False
+                        continue
+                    if in_think_tag:
+                        thinking_count += 1
+                    else:
+                        chunks.append(content)
+                elif reasoning:
+                    if first_token_time is None:
+                        first_token_time = time.perf_counter()
+                    thinking_count += 1
 
         end = time.perf_counter()
 
@@ -191,8 +211,10 @@ def stream_completion(api_key: str, model: str, prompt: str, max_tokens: int = 4
         result.total_seconds = end - start
         result.ttft_seconds = (first_token_time - start) if first_token_time else result.total_seconds
         result.tokens_generated = len(chunks)
+        result.thinking_tokens = thinking_count
+        total_tokens = len(chunks) + thinking_count
         generation_time = end - (first_token_time or start)
-        result.tokens_per_second = result.tokens_generated / generation_time if generation_time > 0 else 0
+        result.tokens_per_second = total_tokens / generation_time if generation_time > 0 else 0
 
     except requests.exceptions.Timeout:
         result.error = "Request timed out (120s)"
@@ -241,7 +263,7 @@ def evaluate_quality(api_key: str, judge_model: str, prompt: str, response_text:
 
 def format_table(results: list[BenchmarkResult]) -> str:
     """Build an ASCII table of benchmark results."""
-    header = f"{'Model':<50} {'TTFT (s)':>9} {'Total (s)':>10} {'Tok/s':>8} {'Tokens':>7}"
+    header = f"{'Model':<50} {'TTFT (s)':>9} {'Total (s)':>10} {'Tok/s':>8} {'Tokens':>7} {'Think':>7}"
     separator = "-" * len(header)
     lines = [separator, header, separator]
 
@@ -249,9 +271,10 @@ def format_table(results: list[BenchmarkResult]) -> str:
         if r.error:
             lines.append(f"{r.model:<50} {'ERROR':>9}  {r.error[:40]}")
         else:
+            think = str(r.thinking_tokens) if r.thinking_tokens else "—"
             lines.append(
                 f"{r.model:<50} {r.ttft_seconds:>9.3f} {r.total_seconds:>10.3f} "
-                f"{r.tokens_per_second:>8.1f} {r.tokens_generated:>7}"
+                f"{r.tokens_per_second:>8.1f} {r.tokens_generated:>7} {think:>7}"
             )
 
     lines.append(separator)
@@ -323,8 +346,9 @@ def main():
             if result.error:
                 print(f"ERROR: {result.error}")
             else:
+                think_str = f" | Think {result.thinking_tokens}" if result.thinking_tokens else ""
                 print(f"TTFT {result.ttft_seconds:.3f}s | Total {result.total_seconds:.3f}s | "
-                      f"{result.tokens_per_second:.1f} tok/s")
+                      f"{result.tokens_per_second:.1f} tok/s{think_str}")
                 print(f"\n  Response:\n  {'-' * 56}")
                 for line in result.output.splitlines():
                     print(f"  {line}")
@@ -342,6 +366,7 @@ def main():
                 ttft_seconds=sum(r.ttft_seconds for r in successful) / len(successful),
                 total_seconds=sum(r.total_seconds for r in successful) / len(successful),
                 tokens_generated=round(sum(r.tokens_generated for r in successful) / len(successful)),
+                thinking_tokens=round(sum(r.thinking_tokens for r in successful) / len(successful)),
                 tokens_per_second=sum(r.tokens_per_second for r in successful) / len(successful),
                 output=successful[-1].output,
             )
